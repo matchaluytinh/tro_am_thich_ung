@@ -1,0 +1,848 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Audio Masking - Demo KHKT</title>
+    <style>
+        body { 
+            background-color: #0f172a; 
+            color: #f8fafc; 
+            font-family: system-ui, -apple-system, sans-serif; 
+            text-align: center; 
+            margin: 0; 
+            padding: 30px 15px 60px 15px; 
+            transition: background-color 0.5s; 
+            overflow-y: auto; 
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Thanh cuộn bên phải */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .container { max-width: 800px; margin: 0 auto; }
+        
+        /* Định nghĩa phụ bên dưới tên hệ thống */
+        .system-title { font-size: 26px; margin-bottom: 6px; color: #ffffff; }
+        .system-subtitle { 
+            font-size: 14px; 
+            color: #38bdf8; 
+            margin-top: 0; 
+            margin-bottom: 25px; 
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+
+        /* Canvas biểu đồ sóng biển */
+        canvas { 
+            width: 100%; 
+            height: 220px; 
+            background: #1e293b; 
+            border-radius: 12px; 
+            margin: 25px 0; 
+            border: 1px solid #334155; 
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            display: block;
+        }
+
+        /* Nút thao tác chính */
+        .btn { background: #3b82f6; color: white; border: none; padding: 12px 20px; font-size: 15px; border-radius: 6px; cursor: pointer; margin: 5px; font-weight: bold; transition: background 0.2s; }
+        .btn:hover { background: #2563eb; }
+        .btn-zen { background: #10b981; }
+        .btn-zen:hover { background: #059669; }
+        .btn-stop { background: #ef4444; }
+        .btn-stop:hover { background: #dc2626; }
+
+        /* Bảng trạng thái */
+        #status-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        #status { font-weight: bold; color: #38bdf8; font-size: 16px; min-height: 24px; }
+        #countdown-display { font-weight: 500; color: #94a3b8; font-size: 13px; margin-top: 6px; }
+
+        /* NÚT MENU 3 GẠCH (Góc trên bên phải) */
+        .hamburger-btn {
+            position: fixed;
+            top: 20px;
+            right: 25px;
+            z-index: 1000;
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: #f8fafc;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+        .hamburger-btn:hover { background: #334155; border-color: #38bdf8; }
+        .hamburger-btn span {
+            display: block; width: 22px; height: 2px;
+            background-color: #f8fafc; border-radius: 2px; transition: 0.3s;
+        }
+
+        /* BẢNG MENU SIDEBAR HỒ SƠ (SLIDE-OUT DRAWER) */
+        .side-drawer {
+            position: fixed; top: 0; right: -360px;
+            width: 330px; height: 100%;
+            background: #1e293b; border-left: 1px solid #334155;
+            z-index: 999; box-shadow: -5px 0 25px rgba(0,0,0,0.5);
+            transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 25px 20px; box-sizing: border-box;
+            overflow-y: auto; text-align: left;
+        }
+        .side-drawer.open { right: 0; }
+
+        .drawer-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+            z-index: 998; display: none;
+        }
+        .drawer-overlay.open { display: block; }
+
+        .drawer-title {
+            font-size: 18px; font-weight: bold; color: #38bdf8;
+            margin-bottom: 20px; padding-bottom: 10px;
+            border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 8px;
+        }
+
+        /* CẤU TRÚC SƠ ĐỒ CÂY (TREE-VIEW ACCORDION) */
+        .tree-node { margin-bottom: 12px; }
+        .tree-header {
+            background: #0f172a; padding: 10px 14px; border-radius: 6px;
+            border: 1px solid #334155; font-weight: 600; font-size: 14px;
+            color: #f1f5f9; cursor: pointer; display: flex;
+            justify-content: space-between; align-items: center; transition: all 0.2s;
+        }
+        .tree-header:hover { border-color: #38bdf8; color: #38bdf8; }
+        .tree-header .arrow { font-size: 10px; transition: transform 0.3s; }
+        .tree-node.expanded .tree-header .arrow { transform: rotate(90deg); }
+
+        .tree-children { display: none; padding-left: 18px; margin-top: 8px; position: relative; }
+        .tree-node.expanded .tree-children { display: block; }
+        .tree-children::before {
+            content: ""; position: absolute; left: 8px; top: 0; bottom: 12px;
+            width: 1px; border-left: 2px dashed #334155;
+        }
+
+        .tree-item {
+            position: relative; padding: 8px 12px; margin: 6px 0;
+            background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+            font-size: 13px; color: #94a3b8; cursor: pointer; transition: all 0.2s;
+        }
+        .tree-item::before {
+            content: ""; position: absolute; left: -10px; top: 50%;
+            width: 8px; height: 1px; border-top: 2px dashed #334155;
+        }
+        .tree-item:hover { color: #ffffff; border-color: #475569; }
+        .tree-item.active {
+            background: #0284c7; color: #ffffff; border-color: #38bdf8;
+            font-weight: 600; box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        }
+
+        /* KHU VỰC CÀI ĐẶT ĐỒNG HỒ TỰ CHỌN GIỜ */
+        .timer-custom-box {
+            position: relative;
+            padding: 12px;
+            margin: 6px 0;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+        }
+        .timer-custom-box::before {
+            content: ""; position: absolute; left: -10px; top: 50%;
+            width: 8px; height: 1px; border-top: 2px dashed #334155;
+        }
+        .timer-inputs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .timer-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+        }
+        .timer-input-group label {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        .timer-input-group input {
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: #38bdf8;
+            border-radius: 4px;
+            padding: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .timer-input-group input:focus {
+            outline: none;
+            border-color: #38bdf8;
+            box-shadow: 0 0 5px rgba(56, 189, 248, 0.4);
+        }
+        .btn-apply-timer {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 8px;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        .btn-apply-timer:hover { background: #0369a1; }
+        .safety-note {
+            font-size: 11px;
+            color: #f59e0b;
+            margin-top: 6px;
+            line-height: 1.3;
+        }
+
+        /* Chế độ Zen & Ẩn con trỏ */
+        .hide-cursor { cursor: none !important; }
+        .hide-cursor * { cursor: none !important; }
+
+        .zen-mode #app, .zen-mode .hamburger-btn, .zen-mode .side-drawer { display: none !important; }
+        .zen-mode { background-color: #000000 !important; overflow: hidden !important; }
+        
+        #zen-container {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 9999;
+        }
+        .zen-mode #zen-container { display: flex !important; }
+
+        .zen-heart {
+            position: relative; width: 140px; height: 140px;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer; user-select: none;
+        }
+
+        .breath-circle {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border-radius: 50%; background: rgba(56, 189, 248, 0.12);
+            border: 2px solid rgba(56, 189, 248, 0.6);
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
+            animation: breathe 4s infinite ease-in-out; pointer-events: none;
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(0.85); opacity: 0.3; box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); }
+            50% { transform: scale(1.3); opacity: 0.8; box-shadow: 0 0 45px rgba(56, 189, 248, 0.6); }
+        }
+
+        #zen-timer {
+            position: relative; z-index: 10; font-size: 22px; font-weight: bold;
+            font-family: monospace, sans-serif; color: #38bdf8; letter-spacing: 1px;
+            transition: opacity 0.3s ease;
+        }
+
+        .zen-hint {
+            position: absolute; bottom: 30px; font-size: 13px; color: #475569;
+            letter-spacing: 1px; user-select: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NÚT 3 GẠCH BÊN PHẢI -->
+    <button class="hamburger-btn" onclick="toggleDrawer()" title="Cấu hình hệ thống">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <!-- MÀN PHỦ KHI MỞ MENU -->
+    <div class="drawer-overlay" id="drawer-overlay" onclick="toggleDrawer()"></div>
+
+    <!-- BẢNG HỒ SƠ TÙY CHỈNH (SIDE DRAWER - SƠ ĐỒ CÂY) -->
+    <div class="side-drawer" id="side-drawer">
+        <div class="drawer-title">
+            ⚙ Hồ Sơ Cấu Hình
+        </div>
+
+        <!-- MỤC CÂY 1: SÓNG NÃO -->
+        <div class="tree-node expanded">
+            <div class="tree-header" onclick="toggleTreeNode(this)">
+                <span>🧠 Sóng Não Mục Tiêu</span>
+                <span class="arrow">▶</span>
+            </div>
+            <div class="tree-children">
+                <div class="tree-item" onclick="selectUserTarget('SLEEP', this)">Nghỉ ngơi / Đi ngủ (Delta 3Hz)</div>
+                <div class="tree-item active" onclick="selectUserTarget('MEMORIZE', this)">Học thuộc / Thư thái (Alpha 10Hz)</div>
+                <div class="tree-item" onclick="selectUserTarget('STUDY', this)">Làm bài tập / Tính toán (Beta 15Hz)</div>
+                <div class="tree-item" onclick="selectUserTarget('FOCUS', this)">Tập trung cao độ (Gamma 30Hz)</div>
+            </div>
+        </div>
+
+        <!-- MỤC CÂY 2: ÂM THANH NỀN -->
+        <div class="tree-node expanded">
+            <div class="tree-header" onclick="toggleTreeNode(this)">
+                <span>🎧 Âm Thanh Nền Phối Hợp</span>
+                <span class="arrow">▶</span>
+            </div>
+            <div class="tree-children">
+                <div class="tree-item active" onclick="selectNoiseType('PINK', this)">Tiếng ồn Hồng (Mưa nhẹ)</div>
+                <div class="tree-item" onclick="selectNoiseType('BROWN', this)">Tiếng ồn Nâu (Sóng biển)</div>
+                <div class="tree-item" onclick="selectNoiseType('WHITE', this)">Tiếng ồn Trắng (Quạt gió)</div>
+                <div class="tree-item" onclick="selectNoiseType('NONE', this)">Tắt tiếng ồn nền</div>
+            </div>
+        </div>
+
+        <!-- MỤC CÂY 3: HẸN GIỜ ĐỒNG HỒ TỰ CHỌN -->
+        <div class="tree-node expanded">
+            <div class="tree-header" onclick="toggleTreeNode(this)">
+                <span>⏱ Đồng Hồ Hẹn Giờ Ngắt</span>
+                <span class="arrow">▶</span>
+            </div>
+            <div class="tree-children">
+                <div class="timer-custom-box">
+                    <span style="font-size: 12px; font-weight: 600; color: #f1f5f9;">Tùy chỉnh thời gian ngắt:</span>
+                    <div class="timer-inputs">
+                        <div class="timer-input-group">
+                            <label for="custom-hours">Giờ</label>
+                            <input type="number" id="custom-hours" min="0" max="2" value="0">
+                        </div>
+                        <div class="timer-input-group">
+                            <label for="custom-minutes">Phút</label>
+                            <input type="number" id="custom-minutes" min="0" max="59" value="45">
+                        </div>
+                    </div>
+                    <button class="btn-apply-timer" onclick="applyCustomTimer()">Xác nhận đặt hẹn giờ</button>
+                    <div class="safety-note">⚠️ Khuyến cáo y tế: Tối đa 120 phút/phiên để bảo vệ màng nhĩ & sức khỏe thính giác.</div>
+                </div>
+
+                <div class="tree-item" id="btn-no-timer" onclick="disableTimer(this)">Tắt hẹn giờ (Nghe tự do)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH CHÍNH (TỐI GIẢN) -->
+    <div class="container" id="app">
+        <h1 class="system-title">Trợ Âm Thích Ứng</h1>
+        <p class="system-subtitle">Hệ thống che phủ âm thanh thay đổi theo thời gian thực hỗ trợ tăng cường khả năng tập trung</p>
+
+        <!-- BẢNG THÔNG BÁO TRẠNG THÁI -->
+        <div id="status-card">
+            <div id="status">Trạng thái: Sẵn sàng kích hoạt</div>
+            <div id="countdown-display">Chế độ: Nghe tự do (Khuyên dùng nghỉ 10 phút sau mỗi 60 phút)</div>
+        </div>
+
+        <!-- CÁC NÚT ĐIỀU KHIỂN CHÍNH -->
+        <div style="margin-top: 10px;">
+            <button class="btn" onclick="startSystem()">Bật Hệ Thống & Micro</button>
+            <button class="btn btn-zen" onclick="toggleZen(event)">Chế Độ Zen</button>
+            <button class="btn btn-stop" onclick="stopSystem()">Tắt Hệ Thống</button>
+        </div>
+
+        <!-- ĐỒ THỊ SÓNG BIỂN LƯỢN NGHỆ THUẬT -->
+        <canvas id="visualizer" width="800" height="220"></canvas>
+    </div>
+
+    <!-- GIAO DIỆN ZEN MODE -->
+    <div id="zen-container">
+        <div class="zen-heart" onclick="toggleTimerVisibility(event)">
+            <div class="breath-circle"></div>
+            <div id="zen-timer">00:00</div>
+        </div>
+        <div class="zen-hint">Nhấp ra ngoài màn hình 1 lần để thoát Chế độ Zen</div>
+    </div>
+
+    <script>
+        let audioCtx, analyser, micStream;
+        let oscL, oscR, masterGain, lowPassFilter;
+        let noiseNode = null, noiseGain = null;
+        let silentAudioBufferNode = null; // Luồng âm thanh rỗng giữ Web Audio active ngầm trên iOS/Android
+        let isZen = false;
+        let isRunning = false;
+        
+        let smoothedNoise = 0;
+        let userTarget = "MEMORIZE"; 
+        let selectedNoise = "PINK";
+
+        let totalTargetSeconds = 0; // Hẹn giờ tính theo giây
+        let remainingSeconds = 0;
+        let bgWorker = null; // Web Worker đếm giờ chính xác khi chạy ngầm
+        let audioProcessingInterval = null;
+
+        const TARGET_CONFIGS = {
+            SLEEP: { beatFreq: 3, baseFreq: 90, name: "Chế độ Đi ngủ (Delta 3Hz)" },
+            MEMORIZE: { beatFreq: 10, baseFreq: 100, name: "Chế độ Học thuộc (Alpha 10Hz)" },
+            STUDY: { beatFreq: 15, baseFreq: 105, name: "Chế độ Làm bài tập (Beta 15Hz)" },
+            FOCUS: { beatFreq: 30, baseFreq: 110, name: "Chế độ Tập trung cao độ (Gamma 30Hz)" }
+        };
+
+        let zenTimerInterval;
+        let zenSeconds = 0;
+        let isTimerVisible = true;
+
+        let cursorTimer;
+        document.addEventListener("mousemove", () => {
+            document.body.classList.remove("hide-cursor");
+            clearTimeout(cursorTimer);
+            cursorTimer = setTimeout(() => {
+                document.body.classList.add("hide-cursor");
+            }, 2500);
+        });
+
+        // KÍCH HOẠT TỰ ĐỘNG KHÔI PHỤC ÂM THANH KHI CHUYỂN TAB TRÊN CÁC HỆ ĐIỀU HÀNH
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible" && audioCtx && isRunning) {
+                if (audioCtx.state === "suspended") {
+                    audioCtx.resume();
+                }
+            }
+        });
+
+        window.onload = () => {
+            startOceanWaveVisualizer();
+            initBackgroundWorker();
+        };
+
+        // KỶ NGHỆ WEB WORKER ĐỂ ĐẾM GIỜ CHÍNH XÁC KHI TẮT MÀN HÌNH HOẶC CHUYỂN TAB
+        function initBackgroundWorker() {
+            const workerCode = `
+                let interval = null;
+                self.onmessage = function(e) {
+                    if (e.data.action === 'start') {
+                        clearInterval(interval);
+                        interval = setInterval(() => {
+                            self.postMessage({ action: 'tick' });
+                        }, 1000);
+                    } else if (e.data.action === 'stop') {
+                        clearInterval(interval);
+                    }
+                };
+            `;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            bgWorker = new Worker(URL.createObjectURL(blob));
+            
+            bgWorker.onmessage = function(e) {
+                if (e.data.action === 'tick' && isRunning && totalTargetSeconds > 0) {
+                    remainingSeconds--;
+                    updateCountdownDisplay();
+
+                    if (remainingSeconds <= 0) {
+                        bgWorker.postMessage({ action: 'stop' });
+                        stopSystem();
+                        alert("Đã hết thời gian nghe an toàn! Hãy tháo tai nghe để thính giác nghỉ ngơi 10-15 phút.");
+                    }
+                }
+            };
+        }
+
+        function toggleDrawer() {
+            document.getElementById("side-drawer").classList.toggle("open");
+            document.getElementById("drawer-overlay").classList.toggle("open");
+        }
+
+        function toggleTreeNode(headerEl) {
+            const treeNode = headerEl.parentElement;
+            treeNode.classList.toggle("expanded");
+        }
+
+        function selectUserTarget(targetKey, btnEl) {
+            userTarget = targetKey;
+            const parent = btnEl.parentElement;
+            parent.querySelectorAll('.tree-item').forEach(b => b.classList.remove('active'));
+            if (btnEl) btnEl.classList.add('active');
+
+            if (isRunning && audioCtx) {
+                applyAudioSettings();
+            }
+        }
+
+        function selectNoiseType(type, btnEl) {
+            selectedNoise = type;
+            const parent = btnEl.parentElement;
+            parent.querySelectorAll('.tree-item').forEach(b => b.classList.remove('active'));
+            if (btnEl) btnEl.classList.add('active');
+
+            if (isRunning && audioCtx) {
+                createNoiseGenerator();
+            }
+        }
+
+        // ĐỒNG HỒ HẸN GIỜ TỰ CHỌN & GIỚI HẠN AN TOÀN Y TẾ
+        function applyCustomTimer() {
+            let h = parseInt(document.getElementById("custom-hours").value) || 0;
+            let m = parseInt(document.getElementById("custom-minutes").value) || 0;
+
+            let totalMins = h * 60 + m;
+
+            if (totalMins <= 0) {
+                alert("Vui lòng nhập thời gian hẹn giờ hợp lệ lớn hơn 0 phút!");
+                return;
+            }
+
+            // Giới hạn an toàn tối đa 120 phút (2 tiếng)
+            if (totalMins > 120) {
+                alert("⚠️ CẢNH BÁO AN TOÀN THÍNH GIÁC:\nHệ thống đã tự động giới hạn về 120 phút (2 tiếng). Việc nghe sóng liên tục quá 2 tiếng có thể gây mệt mỏi thính giác!");
+                totalMins = 120;
+                document.getElementById("custom-hours").value = 2;
+                document.getElementById("custom-minutes").value = 0;
+            }
+
+            totalTargetSeconds = totalMins * 60;
+            remainingSeconds = totalTargetSeconds;
+
+            document.getElementById("btn-no-timer").classList.remove("active");
+            updateCountdownDisplay();
+
+            if (isRunning) {
+                bgWorker.postMessage({ action: 'start' });
+            }
+        }
+
+        function disableTimer(btnEl) {
+            totalTargetSeconds = 0;
+            remainingSeconds = 0;
+            if (bgWorker) bgWorker.postMessage({ action: 'stop' });
+
+            document.querySelectorAll('.tree-item').forEach(b => b.classList.remove('active'));
+            if (btnEl) btnEl.classList.add('active');
+
+            document.getElementById("countdown-display").innerText = "Chế độ: Nghe tự do (Khuyên dùng nghỉ 10 phút sau mỗi 60 phút)";
+            document.getElementById("countdown-display").style.color = "#94a3b8";
+        }
+
+        function updateCountdownDisplay() {
+            if (totalTargetSeconds <= 0) return;
+
+            let hrs = Math.floor(remainingSeconds / 3600);
+            let mins = Math.floor((remainingSeconds % 3600) / 60);
+            let secs = remainingSeconds % 60;
+
+            let timeStr = "";
+            if (hrs > 0) timeStr += `${hrs} giờ `;
+            timeStr += `${mins} phút ${secs < 10 ? '0' : ''}${secs} giây`;
+
+            document.getElementById("countdown-display").innerText = `Tự động ngắt sau: ${timeStr}`;
+            document.getElementById("countdown-display").style.color = "#f59e0b";
+        }
+
+        async function startSystem() {
+            if (isRunning) return;
+
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                    latencyHint: 'playback'
+                });
+
+                // Ép AudioContext luôn khôi phục nếu bị hệ điều hành chặn ngầm
+                audioCtx.onstatechange = () => {
+                    if (audioCtx.state === 'suspended' && isRunning) {
+                        audioCtx.resume();
+                    }
+                };
+
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micStream = audioCtx.createMediaStreamSource(stream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 128;
+                micStream.connect(analyser);
+
+                lowPassFilter = audioCtx.createBiquadFilter();
+                lowPassFilter.type = 'lowpass';
+                lowPassFilter.frequency.value = 350;
+
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 0.05; 
+                
+                lowPassFilter.connect(masterGain);
+                masterGain.connect(audioCtx.destination);
+
+                createSilentBackgroundKeepAlive(); // Phát luồng âm thanh rỗng để giữ kết nối ngầm đa nền tảng
+                createBinauralBeats();
+                createNoiseGenerator();
+
+                isRunning = true;
+                applyAudioSettings();
+
+                // Chạy vòng lặp tính toán thích ứng tiếng ồn ngầm
+                startBackgroundAudioLoop();
+
+                if (totalTargetSeconds > 0) {
+                    remainingSeconds = totalTargetSeconds;
+                    bgWorker.postMessage({ action: 'start' });
+                }
+            } catch (err) {
+                alert("Hãy cấp quyền truy cập Micro để hệ thống thu tiếng ồn!");
+            }
+        }
+
+        function stopSystem() {
+            if (!isRunning) return;
+            
+            if (audioCtx) {
+                audioCtx.close();
+            }
+            isRunning = false;
+            if (bgWorker) bgWorker.postMessage({ action: 'stop' });
+            clearInterval(audioProcessingInterval);
+            document.getElementById('status').innerText = "Trạng thái: Đã dừng phát";
+            document.getElementById('status').style.color = "#ef4444";
+        }
+
+        // TẠO LUỒNG AUDIO RỖNG DUY TRÌ KHÔNG BỊ TRÌNH DUYỆT TẮT NỀN (Dành cho iOS/Safari & Android)
+        function createSilentBackgroundKeepAlive() {
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 5, audioCtx.sampleRate);
+            silentAudioBufferNode = audioCtx.createBufferSource();
+            silentAudioBufferNode.buffer = buffer;
+            silentAudioBufferNode.loop = true;
+            silentAudioBufferNode.connect(audioCtx.destination);
+            silentAudioBufferNode.start();
+        }
+
+        function startBackgroundAudioLoop() {
+            clearInterval(audioProcessingInterval);
+            audioProcessingInterval = setInterval(() => {
+                if (!isRunning || !analyser || !masterGain) return;
+
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(dataArray);
+
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                let rawNoise = sum / dataArray.length;
+                smoothedNoise = smoothedNoise * 0.9 + rawNoise * 0.1;
+
+                let targetGain = 0.04 + (smoothedNoise / 350); 
+                if (targetGain > 0.10) targetGain = 0.10; 
+                masterGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.8);
+            }, 100);
+        }
+
+        function createBinauralBeats() {
+            const now = audioCtx.currentTime;
+
+            oscL = audioCtx.createOscillator();
+            oscR = audioCtx.createOscillator();
+            
+            oscL.type = 'sine';
+            oscR.type = 'sine';
+
+            const merger = audioCtx.createChannelMerger(2);
+
+            oscL.connect(merger, 0, 0);
+            oscR.connect(merger, 0, 1);
+
+            merger.connect(lowPassFilter);
+
+            oscL.start(now);
+            oscR.start(now);
+        }
+
+        function createNoiseGenerator() {
+            if (noiseNode) {
+                try { noiseNode.stop(); } catch(e){}
+                noiseNode.disconnect();
+            }
+
+            if (selectedNoise === "NONE") return;
+
+            const bufferSize = audioCtx.sampleRate * 2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = buffer.getChannelData(0);
+
+            if (selectedNoise === "WHITE") {
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+            } else if (selectedNoise === "PINK") {
+                let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+                for (let i = 0; i < bufferSize; i++) {
+                    let white = Math.random() * 2 - 1;
+                    b0 = 0.99886 * b0 + white * 0.0555179;
+                    b1 = 0.99332 * b1 + white * 0.0750759;
+                    b2 = 0.96900 * b2 + white * 0.1538520;
+                    b3 = 0.86650 * b3 + white * 0.3104856;
+                    b4 = 0.55000 * b4 + white * 0.5329522;
+                    b5 = -0.7616 * b5 - white * 0.0168980;
+                    output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                    output[i] *= 0.11; 
+                    b6 = white * 0.115926;
+                }
+            } else if (selectedNoise === "BROWN") {
+                let lastOutput = 0.0;
+                for (let i = 0; i < bufferSize; i++) {
+                    let white = Math.random() * 2 - 1;
+                    output[i] = (lastOutput + (0.02 * white)) / 1.02;
+                    lastOutput = output[i];
+                    output[i] *= 3.5; 
+                }
+            }
+
+            noiseNode = audioCtx.createBufferSource();
+            noiseNode.buffer = buffer;
+            noiseNode.loop = true;
+
+            noiseGain = audioCtx.createGain();
+            noiseGain.gain.value = 0.15;
+
+            noiseNode.connect(noiseGain);
+            noiseGain.connect(lowPassFilter);
+
+            noiseNode.start();
+        }
+
+        function applyAudioSettings() {
+            const config = TARGET_CONFIGS[userTarget];
+            const now = audioCtx.currentTime;
+
+            oscL.frequency.setValueAtTime(config.baseFreq, now);
+            oscR.frequency.setValueAtTime(config.baseFreq + config.beatFreq, now);
+
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = `Đang chạy: ${config.name}`;
+            statusEl.style.color = "#38bdf8";
+        }
+
+        function startOceanWaveVisualizer() {
+            const canvas = document.getElementById("visualizer");
+            const ctx = canvas.getContext("2d");
+            let phase = 0;
+
+            function render() {
+                requestAnimationFrame(render);
+
+                if (document.hidden) return; // Tiết kiệm CPU/GPU khi tab bị ẩn
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const width = canvas.width;
+                const height = canvas.height;
+                const centerY = height / 2;
+
+                let amplitude = 18;  
+                let frequency = 0.012; 
+                let speed = 0.04;      
+                let strokeColor = "#38bdf8";
+                let fillColorTop = "rgba(56, 189, 248, 0.2)";
+
+                if (isRunning) {
+                    amplitude = 25 + (smoothedNoise * 1.2); 
+                    speed = 0.06 + (smoothedNoise * 0.001); 
+
+                    if (smoothedNoise > 35) {
+                        strokeColor = "#ef4444";
+                        fillColorTop = "rgba(239, 68, 68, 0.25)";
+                    }
+                } else {
+                    strokeColor = "#475569";
+                    fillColorTop = "rgba(71, 85, 105, 0.12)";
+                }
+
+                phase += speed;
+
+                const gradient = ctx.createLinearGradient(0, 0, 0, height);
+                gradient.addColorStop(0, fillColorTop);
+                gradient.addColorStop(1, "rgba(15, 23, 42, 0.0)");
+
+                ctx.beginPath();
+                ctx.moveTo(0, height);
+
+                for (let x = 0; x <= width; x += 2) {
+                    let y = centerY 
+                          + Math.sin(x * frequency + phase) * amplitude
+                          + Math.sin(x * frequency * 0.5 + phase * 0.7) * (amplitude * 0.4);
+
+                    ctx.lineTo(x, y);
+                }
+
+                ctx.lineTo(width, height);
+                ctx.closePath();
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                ctx.beginPath();
+                for (let x = 0; x <= width; x += 2) {
+                    let y = centerY 
+                          + Math.sin(x * frequency + phase) * amplitude
+                          + Math.sin(x * frequency * 0.5 + phase * 0.7) * (amplitude * 0.4);
+
+                    if (x === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+
+                ctx.lineWidth = 3.5;
+                ctx.strokeStyle = strokeColor;
+                ctx.shadowColor = strokeColor;
+                ctx.shadowBlur = 15;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+
+            render();
+        }
+
+        function toggleZen(event) {
+            if (event) event.stopPropagation();
+            document.body.classList.add("zen-mode");
+            isZen = true;
+
+            zenSeconds = 0;
+            updateTimerDisplay();
+            clearInterval(zenTimerInterval);
+            zenTimerInterval = setInterval(() => {
+                zenSeconds++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(zenSeconds / 60).toString().padStart(2, '0');
+            const secs = (zenSeconds % 60).toString().padStart(2, '0');
+            document.getElementById("zen-timer").innerText = `${mins}:${secs}`;
+        }
+
+        function toggleTimerVisibility(event) {
+            event.stopPropagation();
+            const timerEl = document.getElementById("zen-timer");
+            isTimerVisible = !isTimerVisible;
+            timerEl.style.opacity = isTimerVisible ? "1" : "0";
+        }
+
+        document.addEventListener("click", () => {
+            if (isZen) {
+                document.body.classList.remove("zen-mode");
+                isZen = false;
+                clearInterval(zenTimerInterval);
+            }
+        });
+    </script>
+</body>
+</html>
